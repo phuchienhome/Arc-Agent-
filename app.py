@@ -11,7 +11,7 @@ from crewai_tools import tool
 
 load_dotenv()
 
-st.set_page_config(page_title="Arc Testnet CrewAI Agent", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="Arc Testnet AI Agent", page_icon="📈", layout="wide")
 
 # ==================== CẤU HÌNH ====================
 RPC_URL = os.getenv("RPC_URL", "https://rpc.testnet.arc.network")
@@ -21,11 +21,11 @@ w3 = Web3(Web3.HTTPProvider(RPC_URL))
 
 llm = LLM(
     model="groq/llama-3.3-70b-versatile",
-    api_key=GROQ_API_KEY if GROQ_API_KEY else None
+    api_key=GROQ_API_KEY
 )
 
-st.title("🤖 Arc Testnet CrewAI Multi-Agent")
-st.markdown("**Phân tích thị trường + Câu hỏi tự do + Cảnh báo tự động**")
+st.title("🤖 Arc Testnet AI Market Agent")
+st.markdown("**Multi-Agent System • Phân tích thị trường + Câu hỏi tự do + Cảnh báo tự động**")
 
 # ==================== HÀM LẤY DỮ LIỆU ====================
 def get_arc_stats(num_blocks: int = 30):
@@ -44,22 +44,18 @@ def get_arc_stats(num_blocks: int = 30):
         "latest_block": latest_block,
         "avg_tx_per_block": round(avg_tx, 2),
         "total_tx_analyzed": sum(tx_counts),
-        "tx_counts": tx_counts[::-1],
-        "num_blocks_analyzed": len(tx_counts)
+        "tx_counts": tx_counts[::-1]
     }
 
 # ==================== CREWAI TOOL ====================
-@tool("Get Arc Testnet On-Chain Data")
+@tool("Get Arc Testnet Data")
 def get_arc_testnet_data(num_blocks: int) -> str:
-    """Lấy dữ liệu on-chain thực tế từ Arc Testnet."""
     stats = get_arc_stats(num_blocks)
-    if stats is None:
-        return "Không kết nối được RPC."
-    return json.dumps(stats, ensure_ascii=False)
+    return json.dumps(stats, ensure_ascii=False) if stats else "Không kết nối được RPC"
 
 # ==================== AGENTS ====================
 data_collector = Agent(
-    role="Blockchain Data Collector",
+    role="Data Collector",
     goal="Thu thập dữ liệu on-chain chính xác từ Arc Testnet",
     backstory="Chuyên gia thu thập dữ liệu blockchain.",
     tools=[get_arc_testnet_data],
@@ -68,139 +64,129 @@ data_collector = Agent(
 )
 
 trend_analyst = Agent(
-    role="Market Trend Analyst",
-    goal="Phân tích xu hướng và biến động hoạt động mạng",
+    role="Trend Analyst",
+    goal="Phân tích xu hướng hoạt động mạng",
     backstory="Nhà phân tích on-chain chuyên sâu.",
     llm=llm,
     verbose=True
 )
 
-economic_insights = Agent(
-    role="On-Chain Economy Expert",
-    goal="Đánh giá tác động kinh tế đến stablecoin và tokenized assets trên Arc",
+economic_expert = Agent(
+    role="Economic Expert",
+    goal="Đánh giá tác động kinh tế đến stablecoin và tokenized assets",
     backstory="Chuyên gia về hệ sinh thái Arc của Circle.",
     llm=llm,
     verbose=True
 )
 
-report_writer = Agent(
-    role="Professional Report & Answer Synthesizer",
-    goal="Trả lời câu hỏi của user và tổng hợp báo cáo thị trường chất lượng cao bằng tiếng Việt",
-    backstory="Chuyên gia viết báo cáo và trả lời câu hỏi về blockchain.",
+report_agent = Agent(
+    role="Report & Answer Agent",
+    goal="Trả lời câu hỏi người dùng và đưa ra báo cáo thị trường chuyên nghiệp",
+    backstory="Chuyên gia tổng hợp và trả lời câu hỏi về thị trường blockchain.",
     llm=llm,
     verbose=True
 )
 
-# ==================== TASKS (có hỗ trợ câu hỏi tự do) ====================
-collect_data_task = Task(
-    description="Lấy dữ liệu on-chain Arc Testnet với số block được chỉ định.",
+# ==================== TASKS ====================
+collect_task = Task(
+    description="Lấy dữ liệu on-chain với số block được chỉ định.",
     expected_output="Dữ liệu JSON.",
     agent=data_collector
 )
 
-analyze_trend_task = Task(
-    description="Phân tích xu hướng từ dữ liệu thu thập được.",
+trend_task = Task(
+    description="Phân tích xu hướng từ dữ liệu.",
     expected_output="Phân tích xu hướng bằng tiếng Việt.",
     agent=trend_analyst,
-    context=[collect_data_task]
+    context=[collect_task]
 )
 
-economic_analysis_task = Task(
-    description="Đánh giá ý nghĩa kinh tế của dữ liệu.",
+economic_task = Task(
+    description="Đánh giá ý nghĩa kinh tế.",
     expected_output="Đánh giá kinh tế bằng tiếng Việt.",
-    agent=economic_insights,
-    context=[collect_data_task, analyze_trend_task]
+    agent=economic_expert,
+    context=[collect_task, trend_task]
 )
 
-final_report_task = Task(
-    description="""Dựa trên toàn bộ dữ liệu và phân tích, hãy:
-1. Trả lời câu hỏi sau của người dùng (nếu có): {user_question}
-2. Nếu không có câu hỏi cụ thể thì đưa ra báo cáo thị trường tổng quát Arc Testnet.
-3. Kết hợp cảnh báo nếu phát hiện hoạt động bất thường.
+final_task = Task(
+    description="""Dựa trên dữ liệu và phân tích:
+- Trả lời câu hỏi của người dùng: {user_question}
+- Nếu không có câu hỏi thì đưa báo cáo thị trường tổng quát.
+- Kết hợp cảnh báo nếu có hoạt động bất thường.
 Trả lời rõ ràng, có cấu trúc bằng tiếng Việt.""",
     expected_output="Báo cáo + câu trả lời chi tiết bằng tiếng Việt.",
-    agent=report_writer,
-    context=[collect_data_task, analyze_trend_task, economic_analysis_task]
+    agent=report_agent,
+    context=[collect_task, trend_task, economic_task]
 )
 
-# ==================== CREW ====================
 crew = Crew(
-    agents=[data_collector, trend_analyst, economic_insights, report_writer],
-    tasks=[collect_data_task, analyze_trend_task, economic_analysis_task, final_report_task],
+    agents=[data_collector, trend_analyst, economic_expert, report_agent],
+    tasks=[collect_task, trend_task, economic_task, final_task],
     process=Process.sequential,
     verbose=True
 )
 
 # ==================== GIAO DIỆN ====================
 with st.sidebar:
-    st.header("⚙️ Cấu hình")
-    api_key = st.text_input("Groq API Key", value=GROQ_API_KEY, type="password")
+    st.header("Cấu hình")
+    api_key = st.text_input("Groq API Key (miễn phí)", value=GROQ_API_KEY, type="password")
     if api_key:
         os.environ["GROQ_API_KEY"] = api_key
-    
     num_blocks = st.slider("Số block gần nhất", 10, 80, 30)
-    st.markdown("---")
-    st.info("CrewAI sẽ chạy 4 agent chuyên biệt")
 
-# === NHẬP CÂU HỎI TỰ DO ===
-st.subheader("💬 Câu hỏi tự do (tùy chọn)")
+# Câu hỏi tự do
+st.subheader("💬 Nhập câu hỏi tự do (tùy chọn)")
 user_question = st.text_area(
-    "Bạn muốn hỏi gì về thị trường Arc Testnet?",
-    placeholder="Ví dụ: Phân tích tác động khi số giao dịch tăng mạnh? Hoặc: Cơ hội nào cho stablecoin trên Arc hiện nay?",
-    height=100
+    "Bạn muốn hỏi gì?",
+    placeholder="Ví dụ: Phân tích khi số giao dịch tăng mạnh? Hoặc: Cơ hội cho developer trên Arc hiện nay?",
+    height=80
 )
 
-# === NÚT CHẠY ===
-if st.button("🚀 Chạy CrewAI + Phân tích + Cảnh báo", type="primary"):
+# Nút chạy
+if st.button("🚀 Chạy AI Agent (CrewAI)", type="primary"):
     if not api_key:
         st.error("Vui lòng nhập Groq API Key!")
     else:
-        # 1. Lấy dữ liệu và cảnh báo trước (nhanh)
         stats = get_arc_stats(num_blocks)
-        
-        if stats:
-            # === CẢNH BÁO TỰ ĐỘNG ===
-            st.subheader("🔔 Cảnh báo tự động")
-            avg_tx = stats["avg_tx_per_block"]
-            
-            if avg_tx > 25:
-                st.error(f"⚠️ **HOẠT ĐỘNG RẤT CAO** — Trung bình {avg_tx} giao dịch/block. Có thể đang có sự kiện lớn hoặc bot activity mạnh.")
-            elif avg_tx > 15:
-                st.warning(f"📈 **HOẠT ĐỘNG CAO** — Trung bình {avg_tx} giao dịch/block. Thị trường đang sôi động.")
-            elif avg_tx < 5:
-                st.info(f"📉 **HOẠT ĐỘNG THẤP** — Trung bình {avg_tx} giao dịch/block. Thị trường đang yên ắng.")
-            else:
-                st.success(f"✅ **HOẠT ĐỘNG BÌNH THƯỜNG** — Trung bình {avg_tx} giao dịch/block.")
-            
-            # Hiển thị metrics nhanh
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Block mới nhất", stats["latest_block"])
-            col2.metric("TB TX / Block", stats["avg_tx_per_block"])
-            col3.metric("Tổng TX phân tích", stats["total_tx_analyzed"])
 
-            # Biểu đồ
+        # === CẢNH BÁO TỰ ĐỘNG ===
+        if stats:
+            st.subheader("🔔 Cảnh báo tự động")
+            avg = stats["avg_tx_per_block"]
+            if avg > 25:
+                st.error(f"⚠️ HOẠT ĐỘNG RẤT CAO — {avg} TX/block")
+            elif avg > 15:
+                st.warning(f"📈 HOẠT ĐỘNG CAO — {avg} TX/block")
+            elif avg < 5:
+                st.info(f"📉 HOẠT ĐỘNG THẤP — {avg} TX/block")
+            else:
+                st.success(f"✅ HOẠT ĐỘNG BÌNH THƯỜNG — {avg} TX/block")
+
+            # Metrics + Biểu đồ
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Block mới nhất", stats["latest_block"])
+            c2.metric("TB giao dịch/block", stats["avg_tx_per_block"])
+            c3.metric("Tổng TX phân tích", stats["total_tx_analyzed"])
+
             df = pd.DataFrame({
                 "Block gần nhất": list(range(len(stats["tx_counts"]))),
                 "Số giao dịch": stats["tx_counts"]
             })
-            fig = px.line(df, x="Block gần nhất", y="Số giao dịch", title="Xu hướng giao dịch gần đây")
+            fig = px.line(df, x="Block gần nhất", y="Số giao dịch")
             st.plotly_chart(fig, use_container_width=True)
 
-        # 2. Chạy CrewAI
-        with st.spinner("🤖 CrewAI đang phân tích sâu (có thể mất 20-60 giây)..."):
+        # === CHẠY CREWAI ===
+        with st.spinner("🤖 CrewAI đang phân tích..."):
             try:
-                question_text = user_question if user_question.strip() else "Không có câu hỏi cụ thể. Hãy đưa ra báo cáo thị trường tổng quát Arc Testnet."
-                
+                question = user_question.strip() if user_question.strip() else "Không có câu hỏi cụ thể. Hãy đưa báo cáo thị trường tổng quát Arc Testnet."
                 result = crew.kickoff(inputs={
                     "num_blocks": num_blocks,
-                    "user_question": question_text
+                    "user_question": question
                 })
-                
-                st.success("✅ Phân tích CrewAI hoàn tất!")
-                st.markdown("### 📝 Kết quả từ Multi-Agent Crew")
+                st.success("✅ Phân tích hoàn tất!")
+                st.markdown("### 📝 Kết quả từ AI Agent")
                 st.markdown(result)
-                
             except Exception as e:
-                st.error(f"Lỗi khi chạy CrewAI: {str(e)}")
+                st.error(f"Lỗi: {e}")
 
-st.caption("Arc Testnet CrewAI Agent • Multi-Agent + Custom Question + Auto Alert • Powered by CrewAI + Groq")
+st.caption("Arc Testnet AI Agent • CrewAI Multi-Agent System")
