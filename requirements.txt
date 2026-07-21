@@ -5,3 +5,11 @@ plotly
 pandas
 python-dotenv
 groq          
+streamlit
+web3
+plotly
+pandas
+python-dotenv
+crewai
+crewai-tools
+groq
