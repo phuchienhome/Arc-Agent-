@@ -1,12 +1,5 @@
 streamlit
 web3
-requests
-plotly
-pandas
-python-dotenv
-groq          
-streamlit
-web3
 plotly
 pandas
 python-dotenv
